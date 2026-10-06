@@ -1,0 +1,16 @@
+[project]
+name = "distributed-systems-hw"
+version = "0.1.0"
+description = "NCCL, DDP and ZeRO: implementation and measurement exercises"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "torch>=2.4",
+    "numpy",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+cloud = ["skypilot[gcp]"]
+
+[tool.setuptools]
+packages = ["common"]

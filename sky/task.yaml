@@ -1,0 +1,47 @@
+# One SkyPilot task for every exercise. Usage: sky/launch.sh (see GETTING_STARTED.md).
+#
+#   smoke test, 1 L4:    CLUSTER=l4 sky/launch.sh tasks/05_ddp_conversion "python -m common.train --steps 20" --gpus L4:1 --retry-until-up
+#   measurements, 8 GPU: sky/launch.sh tasks/01_nccl_bandwidth "torchrun --nproc_per_node 8 tasks/01_nccl_bandwidth/bench.py" --gpus A100:8
+#
+# Verified 2026-10-06 on an L4: CUDA 13.0, driver 580, torch 2.14.1+cu130, NCCL 2.30.7.
+name: ds-hw
+
+resources:
+  cloud: gcp
+  accelerators: A100:1          # override with --gpus A100:8 on the command line
+  use_spot: true               # project quota is for spot; preemptible, so keep runs short
+
+# The repo root is synced to ~/sky_workdir on the VM. .venv and nccl-tests are
+# in .gitignore and therefore not uploaded; they are built on the VM.
+workdir: .
+
+envs:
+  TASK: tasks/00_smoke          # task directory, results land in $TASK/results
+  CMD: python -m common.train --steps 20
+
+setup: |
+  set -e
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="$HOME/.local/bin:$PATH"
+  uv sync
+
+  # nccl-tests is not pip-installable; build it against the NCCL shipped with torch.
+  if [ ! -x nccl-tests/build/all_reduce_perf ]; then
+    git clone --depth 1 https://github.com/NVIDIA/nccl-tests.git
+    NCCL_HOME=$(uv run python -c "import nvidia.nccl; print(nvidia.nccl.__path__[0])")
+    [ -e "$NCCL_HOME/lib/libnccl.so" ] || ln -s libnccl.so.2 "$NCCL_HOME/lib/libnccl.so"
+    make -C nccl-tests -j MPI=0 CUDA_HOME=/usr/local/cuda NCCL_HOME="$NCCL_HOME"
+  fi
+
+run: |
+  set -e
+  export PATH="$HOME/.local/bin:$PATH"
+  NCCL_HOME=$(uv run python -c "import nvidia.nccl; print(nvidia.nccl.__path__[0])")
+  export LD_LIBRARY_PATH="$NCCL_HOME/lib:${LD_LIBRARY_PATH:-}"
+  export PATH="$PWD/nccl-tests/build:$PATH"
+
+  mkdir -p "$TASK/results"
+  uv run bash sky/record_env.sh "$TASK/results/env.txt"
+
+  echo "+ $CMD"
+  uv run bash -c "$CMD"
