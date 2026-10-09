@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-cloud = ["skypilot[gcp]"]
+cloud = ["skypilot[gcp,runpod]", "modal"]
 
 [tool.setuptools]
 packages = ["common"]

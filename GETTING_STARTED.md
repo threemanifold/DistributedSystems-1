@@ -12,7 +12,8 @@ common/         shared code every task starts from (not a task; tasks may import
 tasks/NN_name/  one folder per task, with its own README (the checklist)
   results/        raw numbers (JSON) + env.txt written by the sky run
   plots/          PNGs, each accompanied by a few sentences in notes.md
-sky/            GCP launch pipeline (SkyPilot)
+sky/            GCP and RunPod launch pipeline (SkyPilot)
+modal/          Modal launch pipeline, same interface as sky/launch.sh
 ```
 
 Rules:
@@ -69,3 +70,17 @@ NCCL shipped with torch), records hardware and software versions to `<task>/resu
 runs the command, and rsyncs `<task>/results/` back to your machine. Nothing is stored in a
 bucket; results live in this repo. `all_reduce_perf` and the other `nccl-tests` binaries are on
 the PATH inside the run.
+
+## RunPod and Modal
+
+RunPod (one-time: `uv run runpod config` with an API key, then `uv run sky check runpod`): prefix
+the commands above with `INFRA=runpod` and use RunPod GPU names, e.g. `--gpus A100-80GB-SXM:8`
+(SXM for NVLink; plain `A100-80GB` is PCIe). Pods are on-demand and cannot be stopped, so the
+cluster `dshw-runpod` is deleted after `IDLE` idle minutes; `sky down dshw-runpod` when done.
+
+Modal (one-time: `uv run modal setup`): `modal/launch.sh` takes the same arguments as
+`sky/launch.sh` with Modal GPU names, e.g. `--gpus A100-80GB:8`, plus `--timeout SECONDS`
+(default 3600). Each run is a fresh container, so there is nothing to tear down.
+
+Both use a CUDA 13 container, which needs a host driver >= 580. Check `nvidia-smi topo` in
+`env.txt` for NVLink before comparing with the A100 spec.
