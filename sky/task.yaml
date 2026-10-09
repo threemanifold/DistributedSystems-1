@@ -1,4 +1,5 @@
 # One SkyPilot task for every exercise. Usage: sky/launch.sh (see GETTING_STARTED.md).
+# Cloud, spot and image are chosen by sky/launch.sh from INFRA.
 #
 #   smoke test, 1 L4:    CLUSTER=l4 sky/launch.sh tasks/05_ddp_conversion "python -m common.train --steps 20" --gpus L4:1 --retry-until-up
 #   measurements, 8 GPU: sky/launch.sh tasks/01_nccl_bandwidth "torchrun --nproc_per_node 8 tasks/01_nccl_bandwidth/bench.py" --gpus A100:8
@@ -7,9 +8,7 @@
 name: ds-hw
 
 resources:
-  cloud: gcp
-  accelerators: A100:1          # override with --gpus A100:8 on the command line
-  use_spot: true               # project quota is for spot; preemptible, so keep runs short
+  accelerators: A100:1          # override with --gpus A100:8 (GCP) or --gpus A100-80GB-SXM:8 (RunPod)
 
 # The repo root is synced to ~/sky_workdir on the VM. .venv and nccl-tests are
 # in .gitignore and therefore not uploaded; they are built on the VM.
@@ -21,9 +20,18 @@ envs:
 
 setup: |
   set -e
+  # RunPod containers run as root without sudo and may lack git or a compiler.
+  if ! command -v git >/dev/null || ! command -v g++ >/dev/null; then
+    SUDO=$([ "$(id -u)" -eq 0 ] || echo sudo)
+    $SUDO apt-get update -q && DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -q git build-essential
+  fi
+
   curl -LsSf https://astral.sh/uv/install.sh | sh
   export PATH="$HOME/.local/bin:$PATH"
   uv sync
+
+  # The CUDA 13 torch wheels need a host driver >= 580.
+  uv run python -c "import torch; assert torch.cuda.is_available(), 'no usable GPU (host driver < 580?)'"
 
   # nccl-tests is not pip-installable; build it against the NCCL shipped with torch.
   if [ ! -x nccl-tests/build/all_reduce_perf ]; then
